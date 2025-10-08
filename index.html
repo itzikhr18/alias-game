@@ -617,7 +617,7 @@
           </div>
           <div class="score-box mistake">
             <div class="score-number" id="mistakeCount">0</div>
-            <div the="score-label">❌ טעות</div>
+            <div class="score-label">❌ טעות</div>
           </div>
           <div class="score-box skip">
             <div class="score-number" id="skipCount">0</div>
@@ -765,7 +765,11 @@
       };
       
       gameState.players[myPlayerId] = {
-        name, teamIndex: 0, color: TEAM_COLORS[0], position: 0, isHost: true
+        name,
+        teamIndex: 0,
+        color: TEAM_COLORS[0],
+        position: 0,
+        isHost: true
       };
       
       console.log('✅ המארח נוסף:', myPlayerId, name);
@@ -812,6 +816,11 @@
       channel = supabase.channel(`room:${currentRoomCode}`);
       
       channel.on('broadcast', { event: 'game-state' }, ({ payload }) => {
+        console.log('📥 התקבל מצב משחק:', {
+          status: payload.status,
+          players: Object.keys(payload.players).length,
+          currentTurn: payload.currentTurn
+        });
         gameState = payload;
         updateUI();
       });
@@ -844,6 +853,12 @@
     
     function broadcastState() {
       if (channel && gameState) {
+        console.log('📡 משדר מצב משחק:', {
+          status: gameState.status,
+          players: Object.keys(gameState.players).length,
+          currentTurn: gameState.currentTurn,
+          turnActive: gameState.turnActive
+        });
         channel.send({
           type: 'broadcast',
           event: 'game-state',
@@ -854,6 +869,8 @@
     
     function updateUI() {
       if (!gameState) return;
+      
+      console.log('🔄 מעדכן UI. Status:', gameState.status);
       
       if (gameState.status === 'lobby') {
         updateLobby();
@@ -894,20 +911,24 @@
       const startBtn = document.getElementById('startGameBtn');
       if (isHost && count >= 2) {
         console.log('✅ מציג כפתור התחל משחק למארח');
-        startBtn.classList.remove('hidden');
+        show(startBtn);
       } else {
         console.log('⏸️ מסתיר כפתור התחל (isHost:', isHost, 'count:', count, ')');
-        startBtn.classList.add('hidden');
+        hide(startBtn);
       }
     }
     
     function startGame() {
       if (!isHost) return;
+      console.log('🎮 מתחיל משחק!');
       gameState.status = 'playing';
-      document.getElementById('lobbyScreen').classList.add('hidden');
-      document.getElementById('gameScreen').classList.remove('hidden');
+      gameState.currentTurn = 0;
+      gameState.turnActive = false;
+      hide(document.getElementById('lobbyScreen'));
+      show(document.getElementById('gameScreen'));
       createBoard();
       broadcastState();
+      updateGame(); // עדכן מסך משחק מיד!
     }
     
     function createBoard() {
@@ -932,8 +953,10 @@
     function updateGame() {
       if (!gameState) return;
       
-      document.getElementById('lobbyScreen').classList.add('hidden');
-      document.getElementById('gameScreen').classList.remove('hidden');
+      console.log('🎮 מעדכן מסך משחק. Status:', gameState.status);
+      
+      hide(document.getElementById('lobbyScreen'));
+      show(document.getElementById('gameScreen'));
       
       if (document.getElementById('boardGrid').children.length === 0) {
         createBoard();
@@ -963,14 +986,21 @@
       const [currentId, currentPlayer] = players[gameState.currentTurn % players.length];
       const isMyTurn = currentId === myPlayerId;
       
+      console.log('👤 תור של:', currentPlayer.name, 'האם זה התור שלי?', isMyTurn);
+      
       document.getElementById('turnTeamName').textContent = currentPlayer.name;
       document.getElementById('turnTeamName').style.color = currentPlayer.color;
       
       const indicator = document.getElementById('turnIndicator');
+      const activeArea = document.getElementById('activePlayArea');
+      const waitingArea = document.getElementById('waitingArea');
+      
       if (isMyTurn) {
+        console.log('✅ זה התור שלי - מציג אזור פעיל');
         indicator.classList.add('my-turn');
-        document.getElementById('activePlayArea').classList.remove('hidden');
-        document.getElementById('waitingArea').classList.add('hidden');
+        show(activeArea);
+        hide(waitingArea);
+        hide(document.getElementById('winnerArea'));
         
         if (gameState.turnActive) {
           enableControls(currentPlayer.position);
@@ -978,9 +1008,11 @@
           disableControls();
         }
       } else {
+        console.log('⏳ לא התור שלי - מציג אזור המתנה');
         indicator.classList.remove('my-turn');
-        document.getElementById('activePlayArea').classList.add('hidden');
-        document.getElementById('waitingArea').classList.remove('hidden');
+        hide(activeArea);
+        show(waitingArea);
+        hide(document.getElementById('winnerArea'));
       }
       
       // נתונים
@@ -1120,9 +1152,9 @@
     }
     
     function showWinner(name) {
-      document.getElementById('activePlayArea').classList.add('hidden');
-      document.getElementById('waitingArea').classList.add('hidden');
-      document.getElementById('winnerArea').classList.remove('hidden');
+      hide(document.getElementById('activePlayArea'));
+      hide(document.getElementById('waitingArea'));
+      show(document.getElementById('winnerArea'));
       document.getElementById('winnerText').textContent = `${name} ניצח!`;
     }
     
