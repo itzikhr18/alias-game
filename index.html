@@ -267,19 +267,38 @@
 
     .game-board {
       margin: 20px 0;
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
 
     .board-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      width: 100%;
+      height: 350px;
       margin-bottom: 16px;
     }
 
+    @media (min-width: 768px) {
+      .board-grid {
+        height: 450px;
+      }
+      .board-space {
+        width: 70px;
+        height: 70px;
+      }
+    }
+
     .board-space {
-      aspect-ratio: 1;
+      width: 60px;
+      height: 60px;
       border: 3px solid #e5e7eb;
-      border-radius: 12px;
+      border-radius: 50%;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -287,32 +306,43 @@
       font-size: 18px;
       font-weight: 800;
       color: #666;
-      position: relative;
+      position: absolute;
       background: white;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
 
     .board-space.finish {
       background: linear-gradient(135deg, #fbbf24, #f59e0b);
       color: white;
       font-size: 14px;
+      border-color: #f59e0b;
+      box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
     }
 
     .pawns {
       display: flex;
-      gap: 3px;
+      gap: 2px;
       position: absolute;
-      bottom: 4px;
+      bottom: 2px;
       flex-wrap: wrap;
-      max-width: 100%;
-      padding: 0 4px;
+      justify-content: center;
+      max-width: 50px;
+      padding: 0 2px;
     }
 
     .pawn {
-      width: 14px;
-      height: 14px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
       border: 2px solid white;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      animation: popIn 0.3s ease-out;
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
     }
 
     .turn-indicator {
@@ -567,7 +597,7 @@
         <button class="btn-primary" id="joinRoomBtn">🚪 הצטרף לחדר</button>
       </div>
     </div>
-    
+
     <!-- מסך המתנה -->
     <div id="lobbyScreen" class="card hidden">
       <div class="room-code-display">
@@ -588,7 +618,7 @@
       <button class="btn-success hidden" id="startGameBtn">🎮 התחל משחק!</button>
       <button class="btn-danger" id="leaveRoomBtn">🚪 עזוב חדר</button>
     </div>
-    
+
     <!-- מסך משחק -->
     <div id="gameScreen" class="card hidden">
       <div class="turn-indicator" id="turnIndicator">
@@ -665,9 +695,7 @@
   </div>
 
   <!-- Supabase SDK -->
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <script>
     // ===== 🔥 הגדרות Supabase - מחובר! =====
     const SUPABASE_URL = 'https://dlgximvxlqjqnwiopdrl.supabase.co';
@@ -765,11 +793,7 @@
       };
       
       gameState.players[myPlayerId] = {
-        name,
-        teamIndex: 0,
-        color: TEAM_COLORS[0],
-        position: 0,
-        isHost: true
+        name, teamIndex: 0, color: TEAM_COLORS[0], position: 0, isHost: true
       };
       
       console.log('✅ המארח נוסף:', myPlayerId, name);
@@ -843,6 +867,7 @@
       });
       
       channel.on('broadcast', { event: 'action' }, ({ payload }) => {
+        console.log('🎬 התקבלה פעולה:', payload.type, 'מ:', payload.playerId);
         if (isHost && gameState) {
           handleHostAction(payload);
         }
@@ -1017,9 +1042,15 @@
       
       // נתונים
       if (gameState.turnData) {
-        document.getElementById('correctCount').textContent = gameState.turnData.correct;
-        document.getElementById('mistakeCount').textContent = gameState.turnData.mistakes;
-        document.getElementById('skipCount').textContent = gameState.turnData.skips;
+        const correct = gameState.turnData.correct || 0;
+        const mistakes = gameState.turnData.mistakes || 0;
+        const skips = gameState.turnData.skips || 0;
+        
+        document.getElementById('correctCount').textContent = correct;
+        document.getElementById('mistakeCount').textContent = mistakes;
+        document.getElementById('skipCount').textContent = skips;
+        
+        console.log('📊 ניקוד עדכני:', { correct, mistakes, skips });
         
         if (gameState.turnActive && gameState.turnData.startTime) {
           const elapsed = Math.floor((Date.now() - gameState.turnData.startTime) / 1000);
@@ -1037,11 +1068,18 @@
       currentWordsList = [...WORDS[num]].sort(() => Math.random() - 0.5);
       wordIndex = 0;
       
+      console.log('▶️ מתחיל תור עם מילים מקטגוריה:', num);
+      
       channel.send({
         type: 'broadcast',
         event: 'action',
-        payload: { type: 'start-turn' }
+        payload: { type: 'start-turn', playerId: myPlayerId }
       });
+      
+      // אם אני המארח, עדכן מיד
+      if (isHost) {
+        handleHostAction({ type: 'start-turn', playerId: myPlayerId });
+      }
       
       showNextWord(num);
       document.getElementById('startTurnBtn').disabled = true;
@@ -1081,12 +1119,26 @@
     }
     
     function handleAction(action) {
+      if (!gameState || !gameState.turnActive) {
+        console.log('⚠️ לא ניתן לבצע פעולה - המשחק לא פעיל');
+        return;
+      }
+      
+      console.log('🎯 פעולה:', action);
+      
+      // שלח את הפעולה לכולם
       channel.send({
         type: 'broadcast',
         event: 'action',
-        payload: { type: action }
+        payload: { type: action, playerId: myPlayerId }
       });
       
+      // אם אני המארח, עדכן מיד
+      if (isHost) {
+        handleHostAction({ type: action, playerId: myPlayerId });
+      }
+      
+      // הצג מילה הבאה
       const players = Object.entries(gameState.players);
       const [_, p] = players[gameState.currentTurn % players.length];
       const num = p.position === 0 ? 1 : ((p.position - 1) % 8) + 1;
@@ -1094,7 +1146,12 @@
     }
     
     function handleHostAction(payload) {
-      if (!isHost || !gameState) return;
+      if (!isHost || !gameState) {
+        console.log('⚠️ רק המארח יכול לעדכן את המצב');
+        return;
+      }
+      
+      console.log('🔧 המארח מעדכן:', payload.type);
       
       if (payload.type === 'start-turn') {
         gameState.turnActive = true;
@@ -1109,33 +1166,54 @@
           }
         }, 1000);
       } else if (payload.type === 'correct') {
-        gameState.turnData.correct++;
+        gameState.turnData.correct = (gameState.turnData.correct || 0) + 1;
+        console.log('✅ נכון! סה"כ:', gameState.turnData.correct);
       } else if (payload.type === 'mistake') {
-        gameState.turnData.mistakes++;
+        gameState.turnData.mistakes = (gameState.turnData.mistakes || 0) + 1;
+        console.log('❌ טעות! סה"כ:', gameState.turnData.mistakes);
       } else if (payload.type === 'skip') {
-        gameState.turnData.skips++;
+        gameState.turnData.skips = (gameState.turnData.skips || 0) + 1;
+        console.log('⏭️ דילוג! סה"כ:', gameState.turnData.skips);
       } else if (payload.type === 'end-turn') {
         endTurnHost();
+        return; // אל תשדר עכשיו, endTurnHost ישדר
       }
       
       broadcastState();
     }
     
     function endTurn() {
+      console.log('⏹️ מסיים תור');
       channel.send({
         type: 'broadcast',
         event: 'action',
-        payload: { type: 'end-turn' }
+        payload: { type: 'end-turn', playerId: myPlayerId }
       });
+      
+      // אם אני המארח, עדכן מיד
+      if (isHost) {
+        handleHostAction({ type: 'end-turn', playerId: myPlayerId });
+      }
+      
       document.getElementById('currentWord').textContent = 'לחץ "התחל תור"';
     }
     
     function endTurnHost() {
       if (!isHost) return;
       
-      const total = gameState.turnData.correct - gameState.turnData.mistakes - gameState.turnData.skips;
+      console.log('🏁 המארח מסיים תור');
+      
+      const total = (gameState.turnData.correct || 0) - (gameState.turnData.mistakes || 0) - (gameState.turnData.skips || 0);
       const players = Object.entries(gameState.players);
-      const [id, _] = players[gameState.currentTurn % players.length];
+      const [id, player] = players[gameState.currentTurn % players.length];
+      
+      console.log('📊 סיכום תור:', {
+        correct: gameState.turnData.correct,
+        mistakes: gameState.turnData.mistakes,
+        skips: gameState.turnData.skips,
+        total: total,
+        player: player.name
+      });
       
       gameState.players[id].position = Math.max(0, Math.min(40, gameState.players[id].position + total));
       gameState.currentTurn++;
