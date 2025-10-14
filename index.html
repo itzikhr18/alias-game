@@ -871,7 +871,7 @@
       document.getElementById('roomCodeDisplay').textContent = currentRoomCode;
       
       subscribeToRoom();
-      updateLobby(); // עדכן מסך מיד!
+      updateLobby();
       broadcastState();
     }
     
@@ -932,8 +932,8 @@
             isHost: false
           };
           console.log('✅ שחקן נוסף! סה"כ שחקנים:', Object.keys(gameState.players).length);
-          updateLobby(); // עדכן מסך המארח!
-          broadcastState(); // שדר לכולם
+          updateLobby();
+          broadcastState();
         }
       });
       
@@ -954,12 +954,6 @@
     
     function broadcastState() {
       if (channel && gameState) {
-        console.log('📡 משדר מצב משחק:', {
-          status: gameState.status,
-          players: Object.keys(gameState.players).length,
-          currentTurn: gameState.currentTurn,
-          turnActive: gameState.turnActive
-        });
         channel.send({
           type: 'broadcast',
           event: 'game-state',
@@ -971,8 +965,6 @@
     function updateUI() {
       if (!gameState) return;
       
-      console.log('🔄 מעדכן UI. Status:', gameState.status);
-      
       if (gameState.status === 'lobby') {
         updateLobby();
       } else if (gameState.status === 'playing') {
@@ -981,7 +973,7 @@
     }
     
     function updateLobby() {
-      if (!gameState) return; // הגנה
+      if (!gameState) return;
       
       console.log('🔄 מעדכן לובי. שחקנים:', Object.keys(gameState.players).length);
       
@@ -1008,7 +1000,6 @@
       document.getElementById('statusMessage').textContent = 
         count >= 2 ? `${count} שחקנים מוכנים!` : 'מחכים לעוד שחקנים...';
       
-      // הצג כפתור התחל רק למארח ורק אם יש 2+ שחקנים
       const startBtn = document.getElementById('startGameBtn');
       if (isHost && count >= 2) {
         console.log('✅ מציג כפתור התחל משחק למארח');
@@ -1042,7 +1033,6 @@
       createBoard();
       broadcastState();
       
-      // עדכן UI מיד
       setTimeout(() => {
         console.log('🔄 מעדכן UI אחרי התחלת משחק');
         updateGame();
@@ -1106,6 +1096,9 @@
       
       console.log('👤 תור של:', currentPlayer.name, 'האם זה התור שלי?', isMyTurn);
       
+      // 🔧 תיקון: הגדרת indicator
+      const indicator = document.getElementById('turnIndicator');
+      
       document.getElementById('turnTeamName').textContent = currentPlayer.name;
       document.getElementById('turnTeamName').style.color = currentPlayer.color;
       
@@ -1137,32 +1130,33 @@
       }
       playersInGame.className = 'players-in-game';
       indicator.appendChild(playersInGame);
+      
       const activeArea = document.getElementById('activePlayArea');
       const waitingArea = document.getElementById('waitingArea');
       const turnStatus = document.getElementById('turnStatus');
       
       if (isMyTurn) {
-          console.log('✅ זה התור שלי - מציג אזור פעיל');
-          indicator.classList.add('my-turn');
-          turnStatus.className = 'turn-status your-turn';
-          turnStatus.innerHTML = '🎮 התור שלך! תשחק עכשיו!';
-          show(activeArea);
-          hide(waitingArea);
-          hide(document.getElementById('winnerArea'));
-          
-          if (gameState.turnActive) {
-            enableControls(currentPlayer.position);
-          } else {
-            disableControls();
-          }
+        console.log('✅ זה התור שלי - מציג אזור פעיל');
+        indicator.classList.add('my-turn');
+        turnStatus.className = 'turn-status your-turn';
+        turnStatus.innerHTML = '🎮 התור שלך! תשחק עכשיו!';
+        show(activeArea);
+        hide(waitingArea);
+        hide(document.getElementById('winnerArea'));
+        
+        if (gameState.turnActive) {
+          enableControls(currentPlayer.position);
+        } else {
+          disableControls();
+        }
       } else {
-          console.log('⏳ לא התור שלי - מציג אזור המתנה');
-          indicator.classList.remove('my-turn');
-          turnStatus.className = 'turn-status waiting';
-          turnStatus.innerHTML = '⏳ מחכה לתור...';
-          hide(activeArea);
-          show(waitingArea);
-          hide(document.getElementById('winnerArea'));
+        console.log('⏳ לא התור שלי - מציג אזור המתנה');
+        indicator.classList.remove('my-turn');
+        turnStatus.className = 'turn-status waiting';
+        turnStatus.innerHTML = '⏳ מחכה לתור...';
+        hide(activeArea);
+        show(waitingArea);
+        hide(document.getElementById('winnerArea'));
       }
       
       // נתונים
@@ -1206,7 +1200,6 @@
       
       console.log('▶️ מתחיל תור! קטגוריה:', num, 'מארח?', isHost);
       
-      // שלח לכולם
       await channel.send({
         type: 'broadcast',
         event: 'action',
@@ -1215,16 +1208,13 @@
       
       console.log('📤 נשלח start-turn');
       
-      // אם אני המארח, עדכן מיד
       if (isHost) {
         console.log('🎯 אני המארח - מעדכן מיד');
         handleHostAction({ type: 'start-turn', playerId: myPlayerId });
       }
       
-      // הצג מילה
       showNextWord(num);
       
-      // כבה כפתור
       document.getElementById('startTurnBtn').disabled = true;
       document.getElementById('correctBtn').disabled = false;
       document.getElementById('mistakeBtn').disabled = false;
@@ -1275,19 +1265,16 @@
       
       console.log('🎯 פעולה:', action);
       
-      // שלח את הפעולה לכולם
       channel.send({
         type: 'broadcast',
         event: 'action',
         payload: { type: action, playerId: myPlayerId }
       });
       
-      // אם אני המארח, עדכן מיד
       if (isHost) {
         handleHostAction({ type: action, playerId: myPlayerId });
       }
       
-      // הצג מילה הבאה
       const players = Object.entries(gameState.players);
       const [_, p] = players[gameState.currentTurn % players.length];
       const num = p.position === 0 ? 1 : ((p.position - 1) % 8) + 1;
@@ -1329,7 +1316,6 @@
             return;
           }
           
-          // עדכן טיימר לכולם
           broadcastState();
         }, 1000);
         
@@ -1347,7 +1333,7 @@
       } else if (payload.type === 'end-turn') {
         console.log('🏁 מסיים תור');
         endTurnHost();
-        return; // אל תשדר עכשיו, endTurnHost ישדר
+        return;
       }
       
       console.log('📡 משדר מצב מעודכן');
@@ -1355,6 +1341,12 @@
     }
     
     function endTurn() {
+      // 🔧 תיקון: ניקוי טיימר
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      
       console.log('⏹️ מסיים תור');
       channel.send({
         type: 'broadcast',
@@ -1362,7 +1354,6 @@
         payload: { type: 'end-turn', playerId: myPlayerId }
       });
       
-      // אם אני המארח, עדכן מיד
       if (isHost) {
         handleHostAction({ type: 'end-turn', playerId: myPlayerId });
       }
@@ -1409,6 +1400,11 @@
     }
     
     function leaveRoom() {
+      // 🔧 תיקון: ניקוי טיימר לפני יציאה
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
       if (channel) channel.unsubscribe();
       location.reload();
     }
