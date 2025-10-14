@@ -348,25 +348,61 @@
     .turn-indicator {
       background: linear-gradient(135deg, #fef3c7, #fde68a);
       border-radius: 16px;
-      padding: 20px;
+      padding: 24px;
       text-align: center;
       margin-bottom: 20px;
+      border: 3px solid #f59e0b;
     }
     
     .turn-indicator.my-turn {
       background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+      border-color: #10b981;
+      animation: glow 2s ease-in-out infinite;
+    }
+    
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.5); }
+      50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.8); }
     }
     
     .turn-text {
-      font-size: 18px;
-      color: #333;
-      margin-bottom: 4px;
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 8px;
+      font-weight: 600;
     }
     
     .turn-team {
-      font-size: 24px;
+      font-size: 36px;
       font-weight: 900;
       color: #667eea;
+      margin-bottom: 8px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .turn-status {
+      font-size: 18px;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-top: 8px;
+    }
+    
+    .turn-status.your-turn {
+      background: #10b981;
+      color: white;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    .turn-status.waiting {
+      background: #f59e0b;
+      color: white;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
     }
     
     .timer-section {
@@ -506,11 +542,20 @@
       text-align: center;
       padding: 40px 20px;
       color: #666;
+      background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+      border-radius: 16px;
+      border: 3px dashed #cbd5e1;
     }
     
     .waiting-icon {
       font-size: 64px;
       margin-bottom: 16px;
+      animation: rotate 3s linear infinite;
+    }
+    
+    @keyframes rotate {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
     
     .winner-display {
@@ -622,8 +667,12 @@
     <!-- מסך משחק -->
     <div id="gameScreen" class="card hidden">
       <div class="turn-indicator" id="turnIndicator">
-        <div class="turn-text">תור:</div>
-        <div class="turn-team" id="turnTeamName">—</div>
+        <div class="turn-text">תור של:</div>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+          <div style="font-size: 48px;">👤</div>
+          <div class="turn-team" id="turnTeamName">—</div>
+        </div>
+        <div class="turn-status waiting" id="turnStatus">⏳ מחכים...</div>
       </div>
       
       <div class="game-board">
@@ -676,11 +725,14 @@
       
       <div id="waitingArea" class="waiting-message hidden">
         <div class="waiting-icon">⏳</div>
-        <div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">
-          מחכים לתור שלך...
+        <div style="font-size: 24px; font-weight: 900; margin-bottom: 16px; color: #f59e0b;">
+          לא התור שלך
         </div>
-        <div style="font-size: 14px;">
+        <div style="font-size: 16px; margin-bottom: 8px;">
           צפה בלוח ותמוך בקבוצה שלך!
+        </div>
+        <div style="font-size: 14px; color: #999; margin-top: 16px;">
+          התור יעבור אליך בקרוב...
         </div>
       </div>
       
@@ -1057,28 +1109,60 @@
       document.getElementById('turnTeamName').textContent = currentPlayer.name;
       document.getElementById('turnTeamName').style.color = currentPlayer.color;
       
-      const indicator = document.getElementById('turnIndicator');
+      // עדכון רשימת שחקנים - הדגש מי בתור
+      const playersInGame = document.createElement('div');
+      playersInGame.style.cssText = 'display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap;';
+      
+      Object.entries(gameState.players).forEach(([id, player]) => {
+        const isCurrent = id === currentId;
+        const badge = document.createElement('div');
+        badge.style.cssText = `
+          padding: 8px 12px;
+          border-radius: 999px;
+          font-size: 13px;
+          font-weight: 700;
+          border: 2px solid ${player.color};
+          background: ${isCurrent ? player.color : 'white'};
+          color: ${isCurrent ? 'white' : player.color};
+          ${isCurrent ? 'animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 4px 12px rgba(0,0,0,0.2);' : ''}
+        `;
+        badge.textContent = `${player.name}${isCurrent ? ' 🎮' : ''}`;
+        playersInGame.appendChild(badge);
+      });
+      
+      // הוסף את רשימת השחקנים מתחת לאינדיקטור
+      const existingList = indicator.querySelector('.players-in-game');
+      if (existingList) {
+        existingList.remove();
+      }
+      playersInGame.className = 'players-in-game';
+      indicator.appendChild(playersInGame);
       const activeArea = document.getElementById('activePlayArea');
       const waitingArea = document.getElementById('waitingArea');
+      const turnStatus = document.getElementById('turnStatus');
       
       if (isMyTurn) {
-        console.log('✅ זה התור שלי - מציג אזור פעיל');
-        indicator.classList.add('my-turn');
-        show(activeArea);
-        hide(waitingArea);
-        hide(document.getElementById('winnerArea'));
-        
-        if (gameState.turnActive) {
-          enableControls(currentPlayer.position);
-        } else {
-          disableControls();
-        }
+          console.log('✅ זה התור שלי - מציג אזור פעיל');
+          indicator.classList.add('my-turn');
+          turnStatus.className = 'turn-status your-turn';
+          turnStatus.innerHTML = '🎮 התור שלך! תשחק עכשיו!';
+          show(activeArea);
+          hide(waitingArea);
+          hide(document.getElementById('winnerArea'));
+          
+          if (gameState.turnActive) {
+            enableControls(currentPlayer.position);
+          } else {
+            disableControls();
+          }
       } else {
-        console.log('⏳ לא התור שלי - מציג אזור המתנה');
-        indicator.classList.remove('my-turn');
-        hide(activeArea);
-        show(waitingArea);
-        hide(document.getElementById('winnerArea'));
+          console.log('⏳ לא התור שלי - מציג אזור המתנה');
+          indicator.classList.remove('my-turn');
+          turnStatus.className = 'turn-status waiting';
+          turnStatus.innerHTML = '⏳ מחכה לתור...';
+          hide(activeArea);
+          show(waitingArea);
+          hide(document.getElementById('winnerArea'));
       }
       
       // נתונים
