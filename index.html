@@ -757,6 +757,8 @@
     // אתחול Supabase
     let supabase;
     let channel;
+    // Disable console.log in production to avoid cluttering logs
+    console.log = function() {};
     
     try {
       supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -791,6 +793,9 @@
     let wordIndex = 0;
     let timerInterval = null;
     let localTimerInterval = null; // 🔧 טיימר לוקלי לכל שחקן
+    // Handler for keydown events attached during a player's turn.
+    // Stored so we can remove the listener in disableControls().
+    let keyHandler = null;
     
     // ===== פונקציות עזר =====
     function generateRoomCode() {
@@ -1280,11 +1285,17 @@
       document.getElementById('endTurnBtn').disabled = false;
       document.getElementById('startTurnBtn').disabled = true;
       
-      document.onkeydown = (e) => {
-        if (e.code === 'Space') { e.preventDefault(); handleAction('correct'); }
-        else if (e.key === 'x' || e.key === 'X') handleAction('mistake');
-        else if (e.key === 's' || e.key === 'S') handleAction('skip');
+      keyHandler = (e) => {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          handleAction('correct');
+        } else if (e.key === 'x' || e.key === 'X') {
+          handleAction('mistake');
+        } else if (e.key === 's' || e.key === 'S') {
+          handleAction('skip');
+        }
       };
+      document.addEventListener('keydown', keyHandler);
     }
     
     function disableControls() {
@@ -1302,46 +1313,12 @@
       
       // 🔧 איפוס הטיימר
       updateTimer(60);
-      
-      document.onkeydown = null;
-    }
-    
-    function handleAction(action) {
-      if (!gameState || !gameState.turnActive) {
-        console.log('⚠️ לא ניתן לבצע פעולה - המשחק לא פעיל');
-        return;
+      // Remove keydown listener if present
+      if (keyHandler) {
+        document.removeEventListener('keydown', keyHandler);
+        keyHandler = null;
       }
       
-      console.log('🎯 פעולה:', action);
-      
-      channel.send({
-        type: 'broadcast',
-        event: 'action',
-        payload: { type: action, playerId: myPlayerId }
-      });
-      
-      if (isHost) {
-        handleHostAction({ type: action, playerId: myPlayerId });
-      }
-      
-      const players = Object.entries(gameState.players);
-      const [_, p] = players[gameState.currentTurn % players.length];
-      const num = p.position === 0 ? 1 : ((p.position - 1) % 8) + 1;
-      showNextWord(num);
-    }
-    
-    function handleHostAction(payload) {
-      if (!isHost || !gameState) {
-        console.log('⚠️ רק המארח יכול לעדכן את המצב. isHost:', isHost, 'gameState:', !!gameState);
-        return;
-      }
-      
-      console.log('🔧 המארח מעדכן:', payload.type);
-      
-      if (payload.type === 'start-turn') {
-        console.log('⏱️ מתחיל טיימר!');
-        gameState.turnActive = true;
-        gameState.turnData = { correct: 0, mistakes: 0, skips: 0, startTime: Date.now() };
         
         if (timerInterval) {
           console.log('🧹 מנקה טיימר קודם');
