@@ -790,6 +790,7 @@
     let currentWordsList = [];
     let wordIndex = 0;
     let timerInterval = null;
+    let localTimerInterval = null; // 🔧 טיימר לוקלי לכל שחקן
     
     // ===== פונקציות עזר =====
     function generateRoomCode() {
@@ -914,7 +915,8 @@
           status: payload.status,
           players: Object.keys(payload.players).length,
           currentTurn: payload.currentTurn,
-          turnActive: payload.turnActive
+          turnActive: payload.turnActive,
+          turnData: payload.turnData
         });
         gameState = payload;
         updateUI();
@@ -954,6 +956,12 @@
     
     function broadcastState() {
       if (channel && gameState) {
+        console.log('📡 משדר מצב:', {
+          status: gameState.status,
+          turnActive: gameState.turnActive,
+          turnData: gameState.turnData,
+          currentTurn: gameState.currentTurn
+        });
         channel.send({
           type: 'broadcast',
           event: 'game-state',
@@ -1061,7 +1069,7 @@
     function updateGame() {
       if (!gameState) return;
       
-      console.log('🎮 מעדכן מסך משחק. Status:', gameState.status);
+      console.log('🎮 מעדכן מסך משחק. Status:', gameState.status, 'turnActive:', gameState.turnActive);
       
       hide(document.getElementById('lobbyScreen'));
       show(document.getElementById('gameScreen'));
@@ -1135,6 +1143,58 @@
       const waitingArea = document.getElementById('waitingArea');
       const turnStatus = document.getElementById('turnStatus');
       
+      // 🔧 עדכון ניקוד - תמיד!
+      if (gameState.turnData) {
+        const correct = gameState.turnData.correct || 0;
+        const mistakes = gameState.turnData.mistakes || 0;
+        const skips = gameState.turnData.skips || 0;
+        
+        document.getElementById('correctCount').textContent = correct;
+        document.getElementById('mistakeCount').textContent = mistakes;
+        document.getElementById('skipCount').textContent = skips;
+        
+        console.log('📊 ניקוד עדכני:', { correct, mistakes, skips });
+      }
+      
+      // 🔧 ניהול טיימר לוקלי לכל שחקן
+      if (localTimerInterval) {
+        clearInterval(localTimerInterval);
+        localTimerInterval = null;
+      }
+      
+      if (gameState.turnActive && gameState.turnData && gameState.turnData.startTime) {
+        console.log('⏱️ מפעיל טיימר לוקלי. startTime:', gameState.turnData.startTime);
+        
+        // עדכן מיד
+        const elapsed = Math.floor((Date.now() - gameState.turnData.startTime) / 1000);
+        const left = Math.max(0, 60 - elapsed);
+        updateTimer(left);
+        
+        // הפעל interval לעדכון כל שנייה
+        localTimerInterval = setInterval(() => {
+          if (!gameState || !gameState.turnActive || !gameState.turnData.startTime) {
+            console.log('🛑 עוצר טיימר לוקלי - התור כבר לא פעיל');
+            clearInterval(localTimerInterval);
+            localTimerInterval = null;
+            return;
+          }
+          
+          const elapsed = Math.floor((Date.now() - gameState.turnData.startTime) / 1000);
+          const left = Math.max(0, 60 - elapsed);
+          console.log('⏱️ טיימר לוקלי:', left, 'שניות נותרו');
+          updateTimer(left);
+          
+          if (left === 0) {
+            console.log('⏰ הטיימר הלוקלי הגיע ל-0');
+            clearInterval(localTimerInterval);
+            localTimerInterval = null;
+          }
+        }, 1000);
+      } else {
+        console.log('⏸️ התור לא פעיל - לא מפעיל טיימר');
+        updateTimer(60);
+      }
+      
       if (isMyTurn) {
         console.log('✅ זה התור שלי - מציג אזור פעיל');
         indicator.classList.add('my-turn');
@@ -1157,25 +1217,6 @@
         hide(activeArea);
         show(waitingArea);
         hide(document.getElementById('winnerArea'));
-      }
-      
-      // נתונים
-      if (gameState.turnData) {
-        const correct = gameState.turnData.correct || 0;
-        const mistakes = gameState.turnData.mistakes || 0;
-        const skips = gameState.turnData.skips || 0;
-        
-        document.getElementById('correctCount').textContent = correct;
-        document.getElementById('mistakeCount').textContent = mistakes;
-        document.getElementById('skipCount').textContent = skips;
-        
-        console.log('📊 ניקוד עדכני:', { correct, mistakes, skips });
-        
-        if (gameState.turnActive && gameState.turnData.startTime) {
-          const elapsed = Math.floor((Date.now() - gameState.turnData.startTime) / 1000);
-          const left = Math.max(0, 60 - elapsed);
-          updateTimer(left);
-        }
       }
     }
     
@@ -1255,9 +1296,12 @@
       document.getElementById('startTurnBtn').disabled = false;
       document.getElementById('startTurnBtn').textContent = '▶️ התחל תור';
       
-      // 🔧 תיקון: איפוס המילה המוצגת
+      // 🔧 תיקון: איפוס המילה והמספר המוצג
       document.getElementById('currentWord').textContent = 'לחץ "התחל תור"';
       document.getElementById('wordNumber').textContent = 'מספר: --';
+      
+      // 🔧 איפוס הטיימר
+      updateTimer(60);
       
       document.onkeydown = null;
     }
@@ -1304,6 +1348,7 @@
           clearInterval(timerInterval);
         }
         
+        // טיימר המארח - רק לבדיקה מתי לסיים תור
         timerInterval = setInterval(() => {
           if (!gameState.turnActive) {
             console.log('⏹️ התור כבר לא פעיל');
@@ -1312,7 +1357,6 @@
           }
           
           const elapsed = Math.floor((Date.now() - gameState.turnData.startTime) / 1000);
-          console.log('⏱️ חלפו', elapsed, 'שניות');
           
           if (elapsed >= 60) {
             console.log('⏰ הזמן נגמר!');
@@ -1320,39 +1364,49 @@
             endTurnHost();
             return;
           }
-          
-          broadcastState();
         }, 1000);
         
         console.log('✅ טיימר הופעל!');
         
-        // 🔧 תיקון: עדכן UI מיד אחרי התחלת תור
+        // עדכן UI מיד אחרי התחלת תור
         updateUI();
+        // שדר את המצב החדש
+        broadcastState();
         
       } else if (payload.type === 'correct') {
         gameState.turnData.correct = (gameState.turnData.correct || 0) + 1;
         console.log('✅ נכון! סה"כ:', gameState.turnData.correct);
+        // 🔧 שדר מיד!
+        broadcastState();
+        
       } else if (payload.type === 'mistake') {
         gameState.turnData.mistakes = (gameState.turnData.mistakes || 0) + 1;
         console.log('❌ טעות! סה"כ:', gameState.turnData.mistakes);
+        // 🔧 שדר מיד!
+        broadcastState();
+        
       } else if (payload.type === 'skip') {
         gameState.turnData.skips = (gameState.turnData.skips || 0) + 1;
         console.log('⏭️ דילוג! סה"כ:', gameState.turnData.skips);
+        // 🔧 שדר מיד!
+        broadcastState();
+        
       } else if (payload.type === 'end-turn') {
         console.log('🏁 מסיים תור');
         endTurnHost();
         return;
       }
-      
-      console.log('📡 משדר מצב מעודכן');
-      broadcastState();
     }
     
     function endTurn() {
-      // 🔧 תיקון: ניקוי טיימר
+      // 🔧 תיקון: ניקוי טיימרים
       if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
+      }
+      if (localTimerInterval) {
+        clearInterval(localTimerInterval);
+        localTimerInterval = null;
       }
       
       console.log('⏹️ מסיים תור');
@@ -1391,9 +1445,17 @@
       gameState.turnActive = false;
       gameState.turnData = { correct: 0, mistakes: 0, skips: 0, startTime: null };
       
-      if (timerInterval) clearInterval(timerInterval);
+      // 🔧 ניקוי טיימרים
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      if (localTimerInterval) {
+        clearInterval(localTimerInterval);
+        localTimerInterval = null;
+      }
       
-      // 🔧 תיקון: עדכון UI למארח לפני שידור
+      // עדכון UI למארח לפני שידור
       updateUI();
       
       // שדר את המצב החדש לכולם
@@ -1406,6 +1468,16 @@
     }
     
     function showWinner(name) {
+      // 🔧 ניקוי טיימרים כשיש מנצח
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      if (localTimerInterval) {
+        clearInterval(localTimerInterval);
+        localTimerInterval = null;
+      }
+      
       hide(document.getElementById('activePlayArea'));
       hide(document.getElementById('waitingArea'));
       show(document.getElementById('winnerArea'));
@@ -1413,10 +1485,14 @@
     }
     
     function leaveRoom() {
-      // 🔧 תיקון: ניקוי טיימר לפני יציאה
+      // 🔧 תיקון: ניקוי כל הטיימרים לפני יציאה
       if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
+      }
+      if (localTimerInterval) {
+        clearInterval(localTimerInterval);
+        localTimerInterval = null;
       }
       if (channel) channel.unsubscribe();
       location.reload();
