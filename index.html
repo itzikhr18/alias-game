@@ -1254,6 +1254,11 @@
       document.getElementById('endTurnBtn').disabled = true;
       document.getElementById('startTurnBtn').disabled = false;
       document.getElementById('startTurnBtn').textContent = '▶️ התחל תור';
+      
+      // 🔧 תיקון: איפוס המילה המוצגת
+      document.getElementById('currentWord').textContent = 'לחץ "התחל תור"';
+      document.getElementById('wordNumber').textContent = 'מספר: --';
+      
       document.onkeydown = null;
     }
     
@@ -1321,6 +1326,9 @@
         
         console.log('✅ טיימר הופעל!');
         
+        // 🔧 תיקון: עדכן UI מיד אחרי התחלת תור
+        updateUI();
+        
       } else if (payload.type === 'correct') {
         gameState.turnData.correct = (gameState.turnData.correct || 0) + 1;
         console.log('✅ נכון! סה"כ:', gameState.turnData.correct);
@@ -1384,6 +1392,11 @@
       gameState.turnData = { correct: 0, mistakes: 0, skips: 0, startTime: null };
       
       if (timerInterval) clearInterval(timerInterval);
+      
+      // 🔧 תיקון: עדכון UI למארח לפני שידור
+      updateUI();
+      
+      // שדר את המצב החדש לכולם
       broadcastState();
     }
     
