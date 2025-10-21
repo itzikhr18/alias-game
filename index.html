@@ -757,9 +757,7 @@
     // אתחול Supabase
     let supabase;
     let channel;
-    // Disable console.log in production to avoid cluttering logs
-    console.log = function() {};
-    
+
     try {
       supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       document.getElementById('supabaseAlert').className = 'alert success';
@@ -1306,11 +1304,11 @@
       document.getElementById('endTurnBtn').disabled = true;
       document.getElementById('startTurnBtn').disabled = false;
       document.getElementById('startTurnBtn').textContent = '▶️ התחל תור';
-      
+
       // 🔧 תיקון: איפוס המילה והמספר המוצג
       document.getElementById('currentWord').textContent = 'לחץ "התחל תור"';
       document.getElementById('wordNumber').textContent = 'מספר: --';
-      
+
       // 🔧 איפוס הטיימר
       updateTimer(60);
       // Remove keydown listener if present
@@ -1318,13 +1316,56 @@
         document.removeEventListener('keydown', keyHandler);
         keyHandler = null;
       }
-      
-        
+    }
+
+    // 🔧 תיקון: פונקציה חסרה - handleAction
+    async function handleAction(type) {
+      console.log('🎬 פעולה:', type);
+
+      const players = Object.entries(gameState.players);
+      const [currentId, currentPlayer] = players[gameState.currentTurn % players.length];
+      const num = currentPlayer.position === 0 ? 1 : ((currentPlayer.position - 1) % 8) + 1;
+
+      // שלח את הפעולה לשרת
+      await channel.send({
+        type: 'broadcast',
+        event: 'action',
+        payload: { type, playerId: myPlayerId }
+      });
+
+      // אם אני המארח, טפל בזה מיד
+      if (isHost) {
+        handleHostAction({ type, playerId: myPlayerId });
+      }
+
+      // הצג מילה הבאה (אם לא סיום תור)
+      if (type !== 'end-turn') {
+        showNextWord(num);
+      }
+    }
+
+    // 🔧 תיקון: פונקציה handleHostAction - הייתה שבורה
+    function handleHostAction(payload) {
+      if (!isHost || !gameState) return;
+
+      console.log('🎯 המארח מטפל בפעולה:', payload.type);
+
+      if (payload.type === 'start-turn') {
+        console.log('▶️ המארח מתחיל תור');
+
+        gameState.turnActive = true;
+        gameState.turnData = {
+          correct: 0,
+          mistakes: 0,
+          skips: 0,
+          startTime: Date.now()
+        };
+
         if (timerInterval) {
           console.log('🧹 מנקה טיימר קודם');
           clearInterval(timerInterval);
         }
-        
+
         // טיימר המארח - רק לבדיקה מתי לסיים תור
         timerInterval = setInterval(() => {
           if (!gameState.turnActive) {
@@ -1332,9 +1373,9 @@
             clearInterval(timerInterval);
             return;
           }
-          
+
           const elapsed = Math.floor((Date.now() - gameState.turnData.startTime) / 1000);
-          
+
           if (elapsed >= 60) {
             console.log('⏰ הזמן נגמר!');
             clearInterval(timerInterval);
@@ -1342,32 +1383,32 @@
             return;
           }
         }, 1000);
-        
+
         console.log('✅ טיימר הופעל!');
-        
+
         // עדכן UI מיד אחרי התחלת תור
         updateUI();
         // שדר את המצב החדש
         broadcastState();
-        
+
       } else if (payload.type === 'correct') {
         gameState.turnData.correct = (gameState.turnData.correct || 0) + 1;
         console.log('✅ נכון! סה"כ:', gameState.turnData.correct);
         // 🔧 שדר מיד!
         broadcastState();
-        
+
       } else if (payload.type === 'mistake') {
         gameState.turnData.mistakes = (gameState.turnData.mistakes || 0) + 1;
         console.log('❌ טעות! סה"כ:', gameState.turnData.mistakes);
         // 🔧 שדר מיד!
         broadcastState();
-        
+
       } else if (payload.type === 'skip') {
         gameState.turnData.skips = (gameState.turnData.skips || 0) + 1;
         console.log('⏭️ דילוג! סה"כ:', gameState.turnData.skips);
         // 🔧 שדר מיד!
         broadcastState();
-        
+
       } else if (payload.type === 'end-turn') {
         console.log('🏁 מסיים תור');
         endTurnHost();
