@@ -1319,62 +1319,47 @@
         keyHandler = null;
       }
       
-        
+              // אין לוגיקה של המארח כאן; הטיפול בפעולות המארח מתבצע ב־handleHostAction().
+    }
+
+    // ===== ניהול פעולות המארח =====
+    function handleHostAction(payload) {
+      // רק המארח עם מצב משחק תקף יכול לבצע עדכון
+      if (!isHost || !gameState) return;
+      if (payload.type === 'start-turn') {
+        gameState.turnActive = true;
+        gameState.turnData = { correct: 0, mistakes: 0, skips: 0, startTime: Date.now() };
         if (timerInterval) {
-          console.log('🧹 מנקה טיימר קודם');
           clearInterval(timerInterval);
         }
-        
-        // טיימר המארח - רק לבדיקה מתי לסיים תור
         timerInterval = setInterval(() => {
           if (!gameState.turnActive) {
-            console.log('⏹️ התור כבר לא פעיל');
             clearInterval(timerInterval);
             return;
           }
-          
           const elapsed = Math.floor((Date.now() - gameState.turnData.startTime) / 1000);
-          
           if (elapsed >= 60) {
-            console.log('⏰ הזמן נגמר!');
             clearInterval(timerInterval);
             endTurnHost();
             return;
           }
         }, 1000);
-        
-        console.log('✅ טיימר הופעל!');
-        
-        // עדכן UI מיד אחרי התחלת תור
         updateUI();
-        // שדר את המצב החדש
         broadcastState();
-        
       } else if (payload.type === 'correct') {
         gameState.turnData.correct = (gameState.turnData.correct || 0) + 1;
-        console.log('✅ נכון! סה"כ:', gameState.turnData.correct);
-        // 🔧 שדר מיד!
         broadcastState();
-        
       } else if (payload.type === 'mistake') {
         gameState.turnData.mistakes = (gameState.turnData.mistakes || 0) + 1;
-        console.log('❌ טעות! סה"כ:', gameState.turnData.mistakes);
-        // 🔧 שדר מיד!
         broadcastState();
-        
       } else if (payload.type === 'skip') {
         gameState.turnData.skips = (gameState.turnData.skips || 0) + 1;
-        console.log('⏭️ דילוג! סה"כ:', gameState.turnData.skips);
-        // 🔧 שדר מיד!
         broadcastState();
-        
       } else if (payload.type === 'end-turn') {
-        console.log('🏁 מסיים תור');
         endTurnHost();
-        return;
       }
     }
-    
+
     function endTurn() {
       // 🔧 תיקון: ניקוי טיימרים
       if (timerInterval) {
