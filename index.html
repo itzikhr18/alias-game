@@ -557,6 +557,12 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    /* הבהוב לטיימר בסיום הזמן */
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
     
     .winner-display {
       background: linear-gradient(135deg, #fbbf24, #f59e0b);
@@ -824,6 +830,19 @@
     };
     
     const TEAM_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+
+// 🎨 צבעי רקע דינמיים לפי קטגוריה
+// כל מספר קטגוריה ממפה לגרדיינט שונה עבור הלוח
+const CATEGORY_GRADIENTS = {
+  1: 'linear-gradient(135deg, #667eea, #764ba2)',
+  2: 'linear-gradient(135deg, #f093fb, #f5576c)',
+  3: 'linear-gradient(135deg, #10b981, #06b6d4)',
+  4: 'linear-gradient(135deg, #f59e0b, #ef4444)',
+  5: 'linear-gradient(135deg, #ec4899, #f472b6)',
+  6: 'linear-gradient(135deg, #3b82f6, #0ea5e9)',
+  7: 'linear-gradient(135deg, #8b5cf6, #a855f7)',
+  8: 'linear-gradient(135deg, #22c55e, #16a34a)',
+};
     
     // ===== מצב גלובלי =====
     let myPlayerId = null;
@@ -1204,6 +1223,9 @@
       // תור
       const players = Object.entries(gameState.players);
       const [currentId, currentPlayer] = players[gameState.currentTurn % players.length];
+      // עדכן את רקע הלוח גם לצופים בהתבסס על קטגוריית השחקן הנוכחי
+      const currentCategory = currentPlayer.position === 0 ? 1 : ((currentPlayer.position - 1) % 8) + 1;
+      updateCategoryBackground(currentCategory);
       const isMyTurn = currentId === myPlayerId;
       
       console.log('👤 תור של:', currentPlayer.name, 'האם זה התור שלי?', isMyTurn);
@@ -1339,6 +1361,8 @@
       }
       
       const num = p.position === 0 ? 1 : ((p.position - 1) % 8) + 1;
+      // עדכון גרדיינט הלוח לפי קטגוריה
+      updateCategoryBackground(num);
       
       currentWordsList = [...WORDS[num]].sort(() => Math.random() - 0.5);
       wordIndex = 0;
@@ -1524,10 +1548,34 @@
     }
     
     function updateTimer(left) {
-      document.getElementById('timerText').textContent = left;
-      document.getElementById('timerFill').style.width = (left/60*100) + '%';
+      const timerText = document.getElementById('timerText');
+      const timerFill = document.getElementById('timerFill');
+      timerText.textContent = left;
+      timerFill.style.width = (left/60*100) + '%';
+      // Dynamic color change for timer bar and blinking text when time is low
+      if (left > 30) {
+        timerFill.style.background = 'linear-gradient(90deg, #10b981, #22d3ee)';
+        timerText.style.animation = '';
+      } else if (left > 12) {
+        timerFill.style.background = 'linear-gradient(90deg, #fbbf24, #f59e0b)';
+        timerText.style.animation = '';
+      } else {
+        timerFill.style.background = 'linear-gradient(90deg, #ef4444, #b91c1c)';
+        timerText.style.animation = 'blink 1s steps(2, start) infinite';
+      }
     }
     
+// ===== 🎨 שינוי רקע הלוח לפי קטגוריה =====
+function updateCategoryBackground(num) {
+  const gradient = CATEGORY_GRADIENTS[num];
+  if (gradient) {
+    const board = document.querySelector('.game-board');
+    if (board) {
+      board.style.background = gradient;
+    }
+  }
+}
+
     function showWinner(name) {
       // 🔧 ניקוי טיימרים כשיש מנצח
       if (timerInterval) {
